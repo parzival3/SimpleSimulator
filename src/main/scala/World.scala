@@ -55,18 +55,18 @@ object DroneState extends Enumeration {
 
 case class Coordinates(val x: Int, val y: Int)
 
-class Station(x: Int, y: Int) extends Element {
+case class Station(x: Int, y: Int) extends Element {
   var coordinates: Coordinates = Coordinates(x, y)
   var strValue: String = "S"
 }
 
-class Target(x: Int, y: Int) extends Element {
+case class Target(x: Int, y: Int) extends Element {
   var coordinates: Coordinates = Coordinates(x, y)
   var strValue: String = "T"
 }
 
 
-class Drone(val start: Station, val target: Target) extends Element {
+case class Drone(val start: Station, val target: Target) extends Element {
 
   object AscisseDirection extends Enumeration {
     val Right = Value(1)
@@ -78,7 +78,7 @@ class Drone(val start: Station, val target: Target) extends Element {
     val Down = Value(-1)
   }
 
-  val state: DroneState.Value = DroneState.Landed
+  var state: DroneState.Value = DroneState.Landed
   var coordinates: Coordinates = start.coordinates
   var strValue: String = "D"
 
@@ -88,12 +88,14 @@ class Drone(val start: Station, val target: Target) extends Element {
   def ascissDistance: Int = target.coordinates.x - coordinates.x
   def ordinaDistance: Int = target.coordinates.y - coordinates.y
 
-  def clock() = {
+  def updateState(state: DroneState.Value): Unit = this.state = state
+
+  def clock(): Unit = {
     if (state == DroneState.Flying) {
       var x = coordinates.x
       var y = coordinates.y
-      if (ascissDistance != 0) x * ascisseDirection.id
-      if (ordinaDistance != 0) y * ordinateDirection.id
+      if (ascissDistance != 0) x +  1 * ascisseDirection.id
+      if (ordinaDistance != 0) y +  1 * ordinateDirection.id
       updateCoordinates(x, y)
     }
   }
@@ -104,21 +106,27 @@ trait Event {
 
 }
 
-case class timeEvent() extends Event
+case class TimeEvent() extends Event
 case class windEvent() extends Event
+case class FireEvent() extends Event
 
 
 trait Controller[A] {
-  def Notify(event: Event)
+  def Notify(event: Event): Unit
   def Register(elem: A): Unit
   def Unregister(elem: A): Unit
+  def enqueueEvent(event: Event): Unit
+  def enqueueEventList(events: ArrayBuffer[Event]): Unit
 }
 
 object DroneController extends  Controller[Drone] {
   val drone_list: ArrayBuffer[Drone] = ArrayBuffer[Drone]()
+  val event_list: ArrayBuffer[Event] = ArrayBuffer[Event]()
+
   override def Notify(event: Event): Unit = {
     event match {
-      case timeEvent() => drone_list.foreach(_.clock())
+      case TimeEvent() => drone_list.foreach(_.clock())
+      case FireEvent() => drone_list.foreach(_.updateState(DroneState.Flying))
     }
   }
 
@@ -129,19 +137,45 @@ object DroneController extends  Controller[Drone] {
   override def Unregister(drone: Drone): Unit = {
     drone_list -= drone
   }
-}
 
-object WorldController extends  Controller[Element] {
-  val element_list: ArrayBuffer[Element] = ArrayBuffer[Element]()
-  override def Notify(event: Event): Unit = {
-
+  override def enqueueEvent(event: Event): Unit = {
+    event_list += event
   }
 
-  override def Register(elem: Element): Unit = {
+  override def enqueueEventList(events: ArrayBuffer[Event]): Unit = {
+    events.foreach(event_list += _)
+  }
+}
+
+object Generator {
+  var futureEventList: ArrayBuffer[Event] = ArrayBuffer[Event]()
+  var everyWhen: Int = 10
+  def cleanEventList: Unit = {
+    futureEventList.clear()
+  }
+  def generateTimeEvent(time: Int): Unit = {
+    if ((time % everyWhen) == 0) {
+      futureEventList += new TimeEvent
+    }
+  }
+}
+
+object WorldController {
+  val element_list: ArrayBuffer[Drone] = ArrayBuffer[Drone]()
+  def checkEnd: Boolean = {
+      for (elm <- element_list) {
+        if (elm.coordinates.x == elm.target.coordinates.x && elm.coordinates.y == elm.coordinates.y) {
+           true
+        }
+      }
+    false
+  }
+
+  def Register(elem: Drone): Unit = {
     element_list += elem
   }
 
-  override def Unregister(elem: Element): Unit = {
+  def Unregister(elem: Drone): Unit = {
     element_list -= elem
   }
 }
@@ -152,9 +186,18 @@ object World extends App {
   val start = new Station(5, 5)
   val target = new Target(15, 15)
   val drone1 = new Drone(start, target)
+  DroneController.Register(drone1)
+  WorldController.Register(drone1)
+  val futureEventList: ArrayBuffer[Event] = ArrayBuffer[Event]()
+  futureEventList += new FireEvent
   // this is the main loop
-  for (i <- 1 to emulation_tme) {
-    print("Hello")
+  for (time <- 1 to emulation_tme) {
+    Generator.cleanEventList
+    Generator.generateTimeEvent(time)
+    DroneController.enqueueEventList(Generator.futureEventList)
+    DroneController.notify()
+    futureEventList.clear()
+    WorldController.checkEnd
   }
   Map.update(List(start, target, drone1))
   Map.print()
