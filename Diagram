@@ -1,0 +1,62 @@
+@startuml
+
+abstract class Element {
+  Coordinates coordinates
+  String strValue
+  updateCoordinates(x: Int, y: Int)
+}
+
+Element <|-- Drone
+Element <|-- Station
+Element <|-- Target
+
+class Event {
+}
+
+Event <|-- StartEvent
+Event <|-- Stop
+Event <|-- Time
+Event <|-- Wind
+
+abstract class Controller {
+  Notify()
+  Register(elem: Element)
+  Unregister(elem: Element)
+  enqueueEvent(event: Event)
+  enqueueEventList(events: Event[])
+}
+Controller <|-- DroneController
+
+class WorldController {
+Element[] elementList
+CheckEnd()
+Register(element)
+Unregister(element)
+}
+
+class Generator {
+  Event[] futureEventList
+  Int  everyWhen
+  cleanEventList()
+  generateTimeEvent(time)
+}
+
+class DroneController {
+  Drone[] drone_list
+  Event[] event_list
+
+  notify(Event event)
+  register(Drone drone)
+  unregister(Drone drone)
+  enqueueEvent(Event event)
+  enqueueEventList(Event[] events)
+}
+
+DroneController "1" *-- "many" Event: contains
+WorldController "1" *-- "many" Drone : contains
+WorldController "1" -- "1" Map : contains
+Generator "1" *-- "many" Event: contains
+WorldController "1" -- "1" DroneController: contains
+WorldController "1" -- "1" Generator: contains
+Map "1" *-- "many" Element : contains
+@enduml
